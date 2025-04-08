@@ -105,7 +105,6 @@ function Board:drawFromStock()
   end
 end
 
--- Mouse pressed to drag cards
 function Board:mousepressed(x, y, button)
   if button == 1 then  -- left click
     
@@ -134,6 +133,10 @@ function Board:mousepressed(x, y, button)
         self.draggedCard = card
         self.dragOffsetX = x - card.x
         self.dragOffsetY = y - card.y
+        self.draggedCard.wasWaste = true;
+        
+        self.draggedCard.prevX = card.x
+        self.draggedCard.prevY = card.y
         
         table.remove(self.waste, #self.waste)
 
@@ -148,81 +151,90 @@ function Board:mousemoved(x, y, dx, dy)
   if self.draggedCard then
     self.draggedCard.x = x - self.dragOffsetX
     self.draggedCard.y = y - self.dragOffsetY
+  --[[
+  elseif self.draggedStack then
+    for i = 1, #self.draggedStack do
+      self.draggedStack[i].x = x - self.dragOffsetX
+      self.draggedStack[i].y = y - self.dragOffsetY
+    end
+  --]]
   end
 end
 
--- Release mouse hold
 function Board:mousereleased(x, y, button)
   if button == 1 and self.draggedCard then
+
+    -- Check if the dragged card is from the waste pile
+    if self.draggedCard.wasWaste then
+      -- Handle cards being dropped from the waste pile onto tableau piles
+      local badDrop = true
+
+      for i, pile in ipairs(self.tableau) do
+        local targetX = 100 + (i - 1) * 100
+        local targetY = 100 + #pile * 30  -- Adjust for number of cards in the pile
+
+        -- Check if released over this pile
+        if x >= targetX and x <= targetX + 70 and y >= targetY - 30 and y <= targetY + 100 then
+          -- Check if dropping the card is legal
+          if self:isLegalSpot(self.draggedCard, pile) then
+            -- Move card from waste to tableau
+            self.draggedCard.x = targetX
+            self.draggedCard.y = targetY
+            table.insert(pile, self.draggedCard)
+            self.draggedCard.wasWaste = false
+            badDrop = false
+            break
+          end
+        end
+      end
+      if badDrop then
+        self.draggedCard.x = self.draggedCard.baseX
+        self.draggedCard.y = self.draggedCard.baseY
+        table.insert(self.waste, #self.waste + 1, self.draggedCard)
+      end
     
-    -- Check for valid drop on a tableau pile
-    for i, pile in ipairs(self.tableau) do
-      local lastCard = pile[#pile]
-      local targetX = 100 + (i - 1) * 100
-      local targetY = 100 + #pile * 30
-      
-      -- Check if released over this pile
-      if x >= targetX and x <= targetX + 70 and y >= targetY - 30 and y <= targetY + 100 then
-        if self:isLegalSpot(self.draggedCard, pile) then
-          
-          -- Move card from waste to tableau
-          if self:isCardInWaste(self.draggedCard) then
-            table.remove(self.waste, #self.waste)
-          else
+    else
+      -- Handle cards being dragged within tableau piles (not from waste)
+      for i, pile in ipairs(self.tableau) do
+        local targetX = 100 + (i - 1) * 100
+        local targetY = 100 + #pile * 30  -- Adjust for number of cards in the pile
+
+        -- Check if released over this pile
+        if x >= targetX and x <= targetX + 70 and y >= targetY - 30 and y <= targetY + 100 then
+          if self:isLegalSpot(self.draggedCard, pile) then
             -- Remove card from pile and flip over last card in pile
             for _, pile in ipairs(self.tableau) do
               for j = #pile, 1, -1 do
                 if pile[j] == self.draggedCard then
                   table.remove(pile, j)
-                  
                   if #pile > 0 then
-                    pile[#pile].faceUp = true;
+                    pile[#pile].faceUp = true
                   end
-                  break
                 end
               end
             end
-          end
-          
-          -- Insert card into pile if in a legal spot and snap to line up with other cards
-          self.draggedCard.x = targetX
-          self.draggedCard.y = targetY
-          table.insert(pile, self.draggedCard)
-          self.draggedCard.wasWaste = false
-          break
-        else
-          
-          -- Move card back to waste pile and original position if in illegal spot
-          -- For cards that are from the waste pile
-          if self.draggedCard.wasWaste then
-            self.draggedCard.x = self.draggedCard.baseX
-            self.draggedCard.y = self.draggedCard.baseY
-            table.insert(self.waste, #self.waste + 1, self.draggedCard)
+
+            -- Insert card into pile if in a legal spot
+            self.draggedCard.x = targetX
+            self.draggedCard.y = targetY
+            table.insert(pile, self.draggedCard)
+            self.draggedCard.wasWaste = false
             break
           else
-            -- All other cards that are in illegal position but not from waste are moved back
-            -- to origial position 
+            -- Move the card back to its original position in tableau if illegal
             self.draggedCard.x = self.draggedCard.prevX
             self.draggedCard.y = self.draggedCard.prevY
-          end
-        end
-      end
-      
-      -- Move cards back to original position if moved to random place (not over pile)
-      if self.draggedCard.wasWaste then
-            self.draggedCard.x = self.draggedCard.baseX
-            self.draggedCard.y = self.draggedCard.baseY
-            table.insert(self.waste, #self.waste + 1, self.draggedCard)
             break
-      else
-        -- All other cards not from waste pile but dragged to somewhere random
-        -- are moved back to their original position
-        self.draggedCard.x = self.draggedCard.prevX
-        self.draggedCard.y = self.draggedCard.prevY
+          end
+        else
+          self.draggedCard.x = self.draggedCard.prevX
+          self.draggedCard.y = self.draggedCard.prevY
+        end
       end
     end
   end
 
+  -- Reset dragged card
   self.draggedCard = nil
 end
 
@@ -240,7 +252,7 @@ end
 function Board:isLegalSpot(card, pile)
   if #pile == 0 then
     -- Check if king
-    return card.value == 13
+    return tonumber(card.value) == 13
   else
     local topCard = pile[#pile]
     -- Check alternating color and descending rank
