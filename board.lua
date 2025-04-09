@@ -10,6 +10,7 @@ function Board:new(deck)
   board.tableau = {}
   board.stock = {}
   board.waste = {}
+  board.draggedStack = nil
   
   board.draggedCard = nil
   board.dragOffsetX = 0
@@ -96,12 +97,22 @@ end
 -- Drawing cards from stock and adding to waste table
 function Board:drawFromStock()
   -- Update waste pile when cards are drawn
-  local drawCount = math.min(3, #self.stock)
-  for i = 1, drawCount do
-    local card = table.remove(self.stock)
-    card.faceUp = true
-    card.wasWaste = true
-    table.insert(self.waste, card)
+  if #self.stock > 0 then
+    local drawCount = math.min(3, #self.stock)
+    for i = 1, drawCount do
+      local card = table.remove(self.stock)
+      card.faceUp = true
+      card.wasWaste = true
+      table.insert(self.waste, card)
+    end
+
+  else
+    for i = #self.waste, 1, -1 do
+        local card = table.remove(self.waste, i)
+        card.faceUp = false
+        card.wasWaste = false
+        table.insert(self.stock, 1, card)
+    end
   end
 end
 
@@ -121,7 +132,14 @@ function Board:mousepressed(x, y, button)
           self.dragOffsetY = y - card.y
           self.draggedCard.prevX = card.x
           self.draggedCard.prevY = card.y
-          --return
+          
+          self.draggedStack = {}
+          for r = i, #pile do
+            table.insert(self.draggedStack, pile[r])
+          end
+          
+          self.draggedFromPile = pileIndex
+          return
         end
       end
     end
@@ -140,7 +158,9 @@ function Board:mousepressed(x, y, button)
         
         table.remove(self.waste, #self.waste)
 
-        --return
+        self.draggedStack = nil
+        self.draggedFromPile = nil
+        return
       end
     end
   end
@@ -151,35 +171,31 @@ function Board:mousemoved(x, y, dx, dy)
   if self.draggedCard then
     self.draggedCard.x = x - self.dragOffsetX
     self.draggedCard.y = y - self.dragOffsetY
-  --[[
   elseif self.draggedStack then
-    for i = 1, #self.draggedStack do
-      self.draggedStack[i].x = x - self.dragOffsetX
-      self.draggedStack[i].y = y - self.dragOffsetY
+    for index, card in ipairs(self.draggedStack.cards) do
+      card.x = x - self.draggedStack.offsetX
+      card.y = y - self.draggedStack.offsetY + (index - 1) * 30
     end
-  --]]
   end
 end
 
 function Board:mousereleased(x, y, button)
   if button == 1 and self.draggedCard then
 
-    -- Check if the dragged card is from the waste pile
+    -- Handle cards from waste pile
     if self.draggedCard.wasWaste then
-      -- Handle cards being dropped from the waste pile onto tableau piles
       local badDrop = true
 
       for i, pile in ipairs(self.tableau) do
         local targetX = 100 + (i - 1) * 100
-        local targetY = 100 + #pile * 30  -- Adjust for number of cards in the pile
+        local targetY = 100 + #pile * 30
 
-        -- Check if released over this pile
         if x >= targetX and x <= targetX + 70 and y >= targetY - 30 and y <= targetY + 100 then
-          -- Check if dropping the card is legal
           if self:isLegalSpot(self.draggedCard, pile) then
-            -- Move card from waste to tableau
             self.draggedCard.x = targetX
             self.draggedCard.y = targetY
+            self.draggedCard.prevX = targetX
+            self.draggedCard.prevY = targetY
             table.insert(pile, self.draggedCard)
             self.draggedCard.wasWaste = false
             badDrop = false
@@ -187,55 +203,66 @@ function Board:mousereleased(x, y, button)
           end
         end
       end
+
       if badDrop then
         self.draggedCard.x = self.draggedCard.baseX
         self.draggedCard.y = self.draggedCard.baseY
-        table.insert(self.waste, #self.waste + 1, self.draggedCard)
+        table.insert(self.waste, self.draggedCard)
       end
-    
+
     else
-      -- Handle cards being dragged within tableau piles (not from waste)
+      -- Handle tableau-to-tableau movement
+      local dropped = false
+
       for i, pile in ipairs(self.tableau) do
         local targetX = 100 + (i - 1) * 100
-        local targetY = 100 + #pile * 30  -- Adjust for number of cards in the pile
+        local targetY = 100 + #pile * 30
 
-        -- Check if released over this pile
         if x >= targetX and x <= targetX + 70 and y >= targetY - 30 and y <= targetY + 100 then
           if self:isLegalSpot(self.draggedCard, pile) then
-            -- Remove card from pile and flip over last card in pile
-            for _, pile in ipairs(self.tableau) do
-              for j = #pile, 1, -1 do
-                if pile[j] == self.draggedCard then
-                  table.remove(pile, j)
-                  if #pile > 0 then
-                    pile[#pile].faceUp = true
-                  end
+            -- Remove draggedStack from original pile
+            local originalPile = self.tableau[self.draggedFromPile]
+            for j = #originalPile, 1, -1 do
+              if originalPile[j] == self.draggedStack[1] then
+                for _ = j, #originalPile do
+                  table.remove(originalPile, j)
                 end
+                if #originalPile > 0 then
+                  originalPile[#originalPile].faceUp = true
+                end
+                break
               end
             end
 
-            -- Insert card into pile if in a legal spot
-            self.draggedCard.x = targetX
-            self.draggedCard.y = targetY
-            table.insert(pile, self.draggedCard)
-            self.draggedCard.wasWaste = false
-            break
-          else
-            -- Move the card back to its original position in tableau if illegal
-            self.draggedCard.x = self.draggedCard.prevX
-            self.draggedCard.y = self.draggedCard.prevY
+            -- Add draggedStack to new pile and reposition
+            for index, card in ipairs(self.draggedStack) do
+              card.x = targetX
+              card.y = targetY + (index - 1) * 30
+              card.prevX = targetX
+              card.prevY = targetY + (index - 1) * 30
+              table.insert(pile, card)
+            end
+
+            dropped = true
             break
           end
-        else
-          self.draggedCard.x = self.draggedCard.prevX
-          self.draggedCard.y = self.draggedCard.prevY
+        end
+      end
+
+      -- If not dropped legally, restore positions
+      if not dropped then
+        for index, card in ipairs(self.draggedStack or {self.draggedCard}) do
+          card.x = card.prevX
+          card.y = card.prevY
         end
       end
     end
   end
 
-  -- Reset dragged card
+  -- Reset drag state
   self.draggedCard = nil
+  self.draggedStack = nil
+  self.draggedFromPile = nil
 end
 
 -- Check if card is in waste pile
