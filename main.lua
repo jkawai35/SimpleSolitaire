@@ -2,18 +2,18 @@ require("deck")
 require("board")
 
 function love.load()
+  love.graphics.setDefaultFilter("nearest", "nearest")
   love.window.setTitle("Solitaire")
   love.window.setMode(800, 600)
+  love.graphics.setBackgroundColor(0.2, 0.6, 0.2, 1)
   
   deck = Deck:new()
   deck:shuffle()
   board = Board:new(deck)
 end
-function love.update()
-end
 
 function love.draw()
-  love.graphics.print("Solitaire!", 350, 10)
+  love.graphics.print("Solitaire!", 360, 550)
   board:draw()
 end
 

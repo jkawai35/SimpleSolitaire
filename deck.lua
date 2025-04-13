@@ -31,6 +31,7 @@ function Deck:new()
       local card = Card:new(suit, value, image, image2, color)
       
       table.insert(deck.cards, card)
+      card.state = "DECK"
     end
   end
   

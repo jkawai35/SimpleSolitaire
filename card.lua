@@ -1,6 +1,7 @@
 Card = {}
 Card.__index = Card
 
+
 function Card:new(suit, value, image1, image2, color)
   local card =  {
     suit = suit,
@@ -11,7 +12,7 @@ function Card:new(suit, value, image1, image2, color)
     baseX = 0,
     baseY = 0,
     color = color,
-    wasWaste = false,
+    state = "UNKNOWN",
     prevX,
     prevY,
     x = 0,
