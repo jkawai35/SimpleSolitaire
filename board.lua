@@ -58,9 +58,6 @@ function Board:update()
   for _, pile in ipairs(self.foundations) do
     if #pile == 13 then
       counter = counter + 1
-    else
-      counter = 0
-      break
     end
   end
 
@@ -73,8 +70,9 @@ function Board:draw()
   
   -- Check win condition
   if self.win then
+    love.graphics.setFont(love.graphics.newFont(48))
     love.graphics.setColor(1, 1, 1) -- white text
-    love.graphics.printf("YOU WIN!", 0, 300, 800, "center")
+    love.graphics.printf("YOU WIN!", 0, 250, 800, "center")
   end
   
   -- Draw card stack markers

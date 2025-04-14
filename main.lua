@@ -12,8 +12,11 @@ function love.load()
   board = Board:new(deck)
 end
 
+function love.update()
+  board:update()
+end
+
 function love.draw()
-  love.graphics.print("Solitaire!", 360, 550)
   board:draw()
 end
 
