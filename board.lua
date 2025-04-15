@@ -112,9 +112,12 @@ function Board:draw()
   -- Draw waste cards in groups of 3
   if #self.waste > 0 then
     -- Draw top 3 waste cards, fanned out to the right of the stock
-    local offset = 20  -- Offset for each card in the fan
-    local baseX = 100  -- Starting x position for the waste pile cards
-    local baseY = 3  -- Starting y position for the waste pile cards
+    -- Offset is for the fan effect so you can see top 3 cards
+    -- baseX and baseY are starter positions and you add offset to baseX to make fan effect
+    -- Offset index tracks how many offsets away from the base a card has to be placed
+    local offset = 20 
+    local baseX = 100
+    local baseY = 3
     local offsetIndex = 1
     
     -- Draw waste cards in correct order
@@ -252,7 +255,7 @@ end
 
 -- Moving cards
 function Board:mousemoved(x, y, dx, dy)
-  if self.draggedCard then
+  if self.draggedCard and (self.draggedCard.state == "WASTE" or self.draggedCard.state == "ACE") then
     self.draggedCard.x = x - self.dragOffsetX
     self.draggedCard.y = y - self.dragOffsetY
   elseif self.draggedStack then
