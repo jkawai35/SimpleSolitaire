@@ -2,7 +2,7 @@
 
 ## Programming Patterns
 ### State Pattern
-#### Keeping track of where card is (stock, ace pile, waste, etc) was useful because the state of a card changes often when you move it to another place, so being able to simply check the state of the card took out some of the confusion when I was writing the release function code.
+#### Keeping track of where card is (stock, ace pile, waste, etc) was useful because the state of a card changes often when you move it to another place, so being able to simply check the state of the card took out some of the confusion when I was writing the release function code. Mainly used when a card is dropped in different locations and remembering where the card originally came from, such as the foundation pile, the waste pile, or a different pile in the tablaeu. This was also the only way I could get the release logic to work since I had issues with card positions being incorrectly assigned if I tried to combine the logic for all card states.
 
 ### Update Pattern
 #### Checking the state of the board, and mainly checking for a win condition if all the foundation piles have a length of 13.
