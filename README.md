@@ -7,8 +7,11 @@
 ### Update Pattern
 #### Checking the state of the board, and mainly checking for a win condition if all the foundation piles have a length of 13.
 
+### Feedback
+#### Tapesh Sankaran - Suggested avoiding string comparisions such as "Hearts" == "Hearts," so an enum-type system was implemented to avoid possible bugs with spelling errors. The same applied for the state of a card and what color it is.
+
 ## Postmortem
-#### If I had to do this assignment again, I would probably try and use the update pattern more and perhaps implement something like the grabber class from one of the class demos. The only reason why I didn't is because I looked up the documentation and found the mousepressed, mousemoved, and mousereleased functions and just decided to continue with those. I also would try and find a cleaner way to write the dropping cards logic since I took a more brute force route and there probably was some redundancy in parts of my code.
+#### Overall, I think my refactoring made the program a lot more readable. Originally, my release and picking up logic was very long and all done within one function, now those functions are much shorter and understandable. In general, my functions got smaller, however there are more functions in the program because I wrote many helper functions that were reused. I think the quality of life changes, such as avoiding direct string comparisions also added to the readability of my program.
 
 ## Assets Used
 ### Card Assets: https://elvgames.itch.io/playing-cards-pixelart-asset-pack

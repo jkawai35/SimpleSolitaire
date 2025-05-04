@@ -1,6 +1,26 @@
 Card = {}
 Card.__index = Card
 
+STATE_ENUM = {
+  DECK = "Deck",
+  WASTE = "Waste",
+  ACE = "Ace",
+  STOCK = "Stock",
+  UNKNOWN = "Unknown",
+  TABLEAU = "Tableau"
+}
+
+COLOR_ENUM = {
+  RED = "Red",
+  BLACK = "Black"
+}
+
+CARD_ENUM = {
+  HEARTS = "Hearts",
+  DIAMONDS = "Diamonds",
+  CLUBS = "Clubs",
+  SPADES = "Spades"
+}
 
 function Card:new(suit, value, image1, image2, color)
   local card =  {
@@ -12,7 +32,7 @@ function Card:new(suit, value, image1, image2, color)
     baseX = 0,
     baseY = 0,
     color = color,
-    state = "UNKNOWN",
+    state = STATE_ENUM.UNKNOWN,
     prevX,
     prevY,
     x = 0,

@@ -27,29 +27,8 @@ function Board:new(deck)
   
   blankStack = love.graphics.newImage("/Sprites/Card Back 3.png")
 
-  -- Create tableau
-  for i = 1, 7 do
-    board.tableau[i] = {}
-
-    for j = 1, i do
-      local card = table.remove(deck.cards)
-      card.x = 100 + (i - 1) * 100
-      card.y = 100 + (j - 1) * 30
-      card.faceUp = (j == i)
-      table.insert(board.tableau[i], card)
-      card.state = "TABLEAU"
-    end
-  end
+  self:createTableau(board)
   
-  -- Insert leftover cards into stock
-  for _, card in ipairs(deck.cards) do
-    card.faceUp = false
-    table.insert(board.stock, card)
-    card.state = "STOCK"
-  end
-
-  deck.cards = nil
-
   return board
 end
  
@@ -76,17 +55,10 @@ function Board:draw()
   end
   
   -- Draw card stack markers
-  love.graphics.draw(blankStack, board.foundationPositions[1].x, board.foundationPositions[1].y)
-  love.graphics.draw(blankStack, board.foundationPositions[2].x, board.foundationPositions[2].y)
-  love.graphics.draw(blankStack, board.foundationPositions[3].x, board.foundationPositions[3].y)
-  love.graphics.draw(blankStack, board.foundationPositions[4].x, board.foundationPositions[4].y)
-  love.graphics.draw(blankStack, 100, 100)
-  love.graphics.draw(blankStack, 200, 100)
-  love.graphics.draw(blankStack, 300, 100)
-  love.graphics.draw(blankStack, 400, 100)
-  love.graphics.draw(blankStack, 500, 100)
-  love.graphics.draw(blankStack, 600, 100)
-  love.graphics.draw(blankStack, 700, 100)
+  for i = 1, 4 do
+    love.graphics.draw(blankStack, board.foundationPositions[i].x, board.foundationPositions[i].y)
+    love.graphics.draw(blankStack, i * 100, 100)
+  end
 
   -- Draw tableau
   for _, pile in ipairs(self.tableau) do
@@ -168,7 +140,7 @@ function Board:drawFromStock()
       local card = table.remove(self.stock)
       card.faceUp = true
       table.insert(self.waste, card)
-      card.state = "WASTE"
+      card.state = STATE_ENUM.WASTE
     end
   else
     -- Refill stock pile if empty, allow for redrawing
@@ -176,86 +148,23 @@ function Board:drawFromStock()
         local card = table.remove(self.waste, i)
         card.faceUp = false
         table.insert(self.stock, 1, card)
-        card.state = "STOCK"
+        card.state = STATE_ENUM.STOCK
     end
   end
 end
 
+-- Picking up cards
 function Board:mousepressed(x, y, button)
-  if button == 1 then  -- left click
-    
-    -- Check tableau piles from top to bottom
-    for pileIndex = 1, #self.tableau do
-      local pile = self.tableau[pileIndex]
-      for i = #pile, 1, -1 do
-        local card = pile[i]
-
-        -- Check if click occurs within the bounds of a card in the tableau
-        if card.faceUp and x >= card.x and x <= card.x + 70 and y >= card.y and y <= card.y + 100 then
-          self.draggedCard = card
-          self.dragOffsetX = x - card.x
-          self.dragOffsetY = y - card.y
-          self.draggedCard.prevX = card.x
-          self.draggedCard.prevY = card.y
-          
-          -- Add cards under picked card to drag a stack
-          self.draggedStack = {}
-          for r = i, #pile do
-            table.insert(self.draggedStack, pile[r])
-          end
-          
-          -- Keep track of the pile dragged from
-          self.draggedFromPile = pileIndex
-          return
-        end
-      end
-    end
-    
-    -- Dragging cards from waste pile
-    if #self.waste > 0 then
-      local card = self.waste[#self.waste]
-      
-      -- Check if card from the waste pile is clicked on
-      -- Remove card from table if clicked in appropriate  area
-      if card.faceUp and x >= card.x and x <= card.x + 70 and y >= card.y and y <= card.y + 100 then
-        self.draggedCard = card
-        self.dragOffsetX = x - card.x
-        self.dragOffsetY = y - card.y        
-        self.draggedCard.prevX = card.x
-        self.draggedCard.prevY = card.y
-        
-        table.remove(self.waste, #self.waste)
-
-        self.draggedStack = nil
-        self.draggedFromPile = nil
-        return
-      end
-    end
-    
-    -- Check if any of the cards from the foundation piles are picked
-    -- Remove card from table if clicked in appropriate area
-    for i, foundation in ipairs(self.foundations) do
-      local topCard = foundation[#foundation]
-        if topCard and x >= topCard.x and x <= topCard.x + 70 and y >= topCard.y and y <= topCard.y + 100 then
-          self.draggedCard = topCard
-          self.dragOffsetX = x - topCard.x
-          self.dragOffsetY = y - topCard.y
-          self.draggedCard.prevX = topCard.x
-          self.draggedCard.prevY = topCard.y
-          self.draggedFromFoundation = foundation
-          table.remove(foundation, #foundation)
-          
-          self.draggedStack = nil
-          self.draggedFromPile = nil
-          return
-        end
-    end
+  if button == 1 then 
+    if self:tryPickTableauCard(x, y) then return end
+    if self:tryPickWasteCard(x, y) then return end
+    if self:tryPickFoundationCard(x, y) then return end
   end
 end
 
 -- Moving cards
 function Board:mousemoved(x, y, dx, dy)
-  if self.draggedCard and (self.draggedCard.state == "WASTE" or self.draggedCard.state == "ACE") then
+  if self.draggedCard and (self.draggedCard.state == STATE_ENUM.WASTE or self.draggedCard.state == STATE_ENUM.ACE) then
     self.draggedCard.x = x - self.dragOffsetX
     self.draggedCard.y = y - self.dragOffsetY
   elseif self.draggedStack then
@@ -266,218 +175,41 @@ function Board:mousemoved(x, y, dx, dy)
   end
 end
 
--- Release mouse click logic
+-- Release logic
+-- Update cards or stacks based on where they are dropped
 function Board:mousereleased(x, y, button)
-  if button == 1 and self.draggedCard then
+  if button ~= 1 or not self.draggedCard then return end
 
-    -- Handle cards from waste pile
-    if self.draggedCard.state == "WASTE" then
-      -- Assume illegal drop
-      local badDrop = true
+  local state = self.draggedCard.state
+  local handled = false
 
-      -- Checking each pile in tablaeu and inserting card/stack if legal placement
-      -- Update positions of cards and change state if legal placement
-      for i, pile in ipairs(self.tableau) do
-        local targetX = 100 + (i - 1) * 100
-        local targetY = 100 + #pile * 30
-
-        if x >= targetX and x <= targetX + 70 and y >= targetY - 30 and y <= targetY + 100 then
-          if self:isLegalSpot(self.draggedCard, pile) then
-            self.draggedCard.x = targetX
-            self.draggedCard.y = targetY
-            self.draggedCard.prevX = targetX
-            self.draggedCard.prevY = targetY
-            table.insert(pile, self.draggedCard)
-            self.draggedCard.state = "TABLEAU"
-            badDrop = false
-            break
-          end
-        end
-      end
-      
-      -- Checking placement into foundation piles
-      -- Update positions of cards and change state if legal placement
-      for l, foundation in ipairs(self.foundations) do
-        local pos = self.foundationPositions[l]
-        if x >= pos.x and x <= pos.x + 70 and y >= pos.y and y <= pos.y + 100 then
-          if self:legalFoundation(self.draggedCard, foundation) then
-            self.draggedCard.x = pos.x
-            self.draggedCard.y = pos.y
-            self.draggedCard.prevX = pos.x
-            self.draggedCard.prevY = pos.y
-            table.insert(foundation, self.draggedCard)
-            self.draggedCard.state ="ACE"
-            badDrop = false
-            break
-          end
-        end
-      end
-
-      -- If illegal drop or not placed over a pile then add back to waste pile
-      if badDrop then
-        self.draggedCard.x = self.draggedCard.baseX
-        self.draggedCard.y = self.draggedCard.baseY
-        table.insert(self.waste, self.draggedCard)
-        self.draggedCard.state = "WASTE"
-      end
-      
-    -- Checking placement of cards that came from foundation piles
-    elseif self.draggedCard.state == "ACE" then
-      local badDrop = true
-
-      -- Check if legal placement into tablaeu
-      -- Update positions and change state as before with waste pile cards
-      for i, pile in ipairs(self.tableau) do
-        local targetX = 100 + (i - 1) * 100
-        local targetY = 100 + #pile * 30
-
-        if x >= targetX and x <= targetX + 70 and y >= targetY - 30 and y <= targetY + 100 then
-          if self:isLegalSpot(self.draggedCard, pile) then
-            self.draggedCard.x = targetX
-            self.draggedCard.y = targetY
-            self.draggedCard.prevX = targetX
-            self.draggedCard.prevY = targetY
-            table.insert(pile, self.draggedCard)
-            self.draggedCard.state = "TABLEAU"
-            badDrop = false
-            break
-          end
-        end
-      end
-      
-      -- Check if legal placement into foundation piles
-      -- Update positions and change state as before with waste pile cards
-      for l, foundation in ipairs(self.foundations) do
-        local pos = self.foundationPositions[l]
-        if x >= pos.x and x <= pos.x + 70 and y >= pos.y and y <= pos.y + 100 then
-          if self:legalFoundation(self.draggedCard, foundation) then
-            self.draggedCard.x = pos.x
-            self.draggedCard.y = pos.y
-            table.insert(foundation, self.draggedCard)
-            self.draggedCard.state = "ACE"
-            badDrop = false
-            break
-          end
-        end
-      end
-
-      -- Reset position and put back into correct foundation pile if illegal placement
-      if badDrop then
-        self.draggedCard.x = self.draggedCard.prevX
-        self.draggedCard.y = self.draggedCard.prevY
-        table.insert(self.draggedFromFoundation, self.draggedCard)
-        
-      end
-
-    else
-      -- Handle tableau-to-tableau movement
-      local badDrop = true
-
-      -- Check if placement into another pile is legal
-      -- Update positions and state as before
-      for i, pile in ipairs(self.tableau) do
-        local targetX = 100 + (i - 1) * 100
-        local targetY = 100 + #pile * 30
-
-        -- Check which pile card is being placed into
-        -- Remove dragged stack from the original pile if legal placement
-        -- Make sure last card in original pile is face up
-        -- Update positions
-        if x >= targetX and x <= targetX + 70 and y >= targetY - 30 and y <= targetY + 100 and self.draggedCard.state ~= "ACE"  and self.draggedCard ~= "WASTE" then
-          if self:isLegalSpot(self.draggedCard, pile) then
-            local originalPile = self.tableau[self.draggedFromPile]
-            for j = #originalPile, 1, -1 do
-              if originalPile[j] == self.draggedStack[1] then
-                for _ = j, #originalPile do
-                  table.remove(originalPile, j)
-                end
-                if #originalPile > 0 then
-                  originalPile[#originalPile].faceUp = true
-                end
-                break
-              end
-            end
-
-            -- Add draggedStack to new pile and reposition
-            for index, card in ipairs(self.draggedStack) do
-              card.x = targetX
-              card.y = targetY + (index - 1) * 30
-              card.prevX = targetX
-              card.prevY = targetY + (index - 1) * 30
-              table.insert(pile, card)
-              card.state = "TABLEAU"
-            end
-            badDrop = false
-            break
-          end
-        end
-        
-        -- Check if placement into foundation pile
-        -- Remove card from original pile if legal placement
-        -- Make sure last card in original pile is now face up
-        -- Update positions and change states
-        for l, foundation in ipairs(self.foundations) do
-            local pos = self.foundationPositions[l]
-            if x >= pos.x and x <= pos.x + 70 and y >= pos.y and y <= pos.y + 100 then
-              if self:legalFoundation(self.draggedCard, foundation) then
-                local sourcePile = self.tableau[self.draggedFromPile]
-                for j = #sourcePile, 1, -1 do
-                  if sourcePile[j] == self.draggedCard then
-                    table.remove(sourcePile, j)
-
-                    -- Flip the new top card if needed
-                    if #sourcePile > 0 then
-                      sourcePile[#sourcePile].faceUp = true
-                    end
-                    break
-                  end
-                end
-                self.draggedCard.x = pos.x
-                self.draggedCard.y = pos.y
-                table.insert(foundation, self.draggedCard)
-                self.draggedCard.state = "ACE"
-                badDrop = false
-              end
-            end
-          end
-      end
-
-      -- If not dropped legally, restore positions
-      if badDrop then
-        for index, card in ipairs(self.draggedStack or {self.draggedCard}) do
-          card.x = card.prevX
-          card.y = card.prevY
-        end
-      end
-    end
+  if state == STATE_ENUM.WASTE then
+    handled = self:handleWasteRelease(x, y)
+  elseif state == STATE_ENUM.ACE then
+    handled = self:handleFoundationRelease(x, y)
+  else
+    handled = self:handleTableauRelease(x, y)
   end
 
-  -- Reset drag state
-  self.draggedCard = nil
-  self.draggedStack = nil
-  self.draggedFromPile = nil
+  if not handled then
+    self:restoreDraggedCards()
+  end
+
+  self:resetDragState()
 end
 
--- Check if card is in waste pile
-function Board:isCardInWaste(card)
-  for i = 1, #self.waste do
-    if self.waste[i] == card then
-      return true
-    end
-  end
-  return false
-end
+-- HELPER FUNCTIONS --
 
 -- Check if released card is in a legal spot
 function Board:isLegalSpot(card, pile)
   -- Check if pile is empty
   if #pile == 0 then
     -- Check if king
-    return tonumber(card.value) == 13
+    return card.value == 13
   else
     local topCard = pile[#pile]
     -- Check alternating color and descending rank
-    return card.color ~= topCard.color and tonumber(card.value) == tonumber((topCard.value - 1))
+    return card.color ~= topCard.color and card.value == topCard.value - 1
   end
 end
 
@@ -485,12 +217,265 @@ end
 function Board:legalFoundation(card, foundation)
   -- Check if foundation is empty and if card is an ace
   if #foundation == 0 then
-    if tonumber(card.value) == 1 then
+    if card.value == 1 then
       return true
     end
     return false
   else
     local topCard = foundation[#foundation]
-    return topCard.suit == card.suit and tonumber(card.value) == tonumber((topCard.value + 1))
+    return topCard.suit == card.suit and card.value == topCard.value + 1
   end
 end
+
+-- Update card position
+function Board:updatePosition(card, pile, targetX, targetY)
+  card.x = targetX
+  card.y = targetY
+  card.prevX = targetX
+  card.prevY = targetY
+  table.insert(pile, card)
+end
+
+-- Update offset when card is dragged
+function Board:updateOffset(x, y, newCard)
+  self.draggedCard = newCard
+  self.dragOffsetX = x - newCard.x
+  self.dragOffsetY = y - newCard.y
+  self.draggedCard.prevX = newCard.x
+  self.draggedCard.prevY = newCard.y
+end
+
+-- Picking up card from Tableau
+function Board:tryPickTableauCard(x, y)
+  -- Check tableau piles from top to bottom
+  for pileIndex, pile in ipairs(self.tableau) do
+    for i = #pile, 1, -1 do
+      local card = pile[i]
+
+      -- Check if click occurs within the bounds of a card in the tableau
+      if card.faceUp and x >= card.x and self:checkInBounds(card, x, y) then
+        self:updateOffset(x, y, card)
+        
+        -- Add cards under picked card to drag a stack
+        self.draggedStack = {}
+        for r = i, #pile do
+          table.insert(self.draggedStack, pile[r])
+        end
+        
+        -- Keep track of the pile dragged from
+        self.draggedFromPile = pileIndex
+        return true
+      end
+    end
+  end
+
+  return false
+  end
+  
+-- Picking up card from waste pile
+function Board:tryPickWasteCard(x, y)
+  local card = self.waste[#self.waste]
+  if card and card.faceUp and self:checkInBounds(card, x, y) then
+    self:updateOffset(x, y, card)
+    table.remove(self.waste)
+    self.draggedStack = nil
+    self.draggedFromPile = nil
+    return true
+  end
+  return false
+end
+
+-- Picking up card from foundation pile
+function Board:tryPickFoundationCard(x, y)
+  for i, foundation in ipairs(self.foundations) do
+    local topCard = foundation[#foundation]
+    if topCard and self:checkInBounds(topCard, x, y) then
+      self:updateOffset(x, y, topCard)
+      self.draggedFromFoundation = foundation
+      table.remove(foundation)
+      self.draggedStack = nil
+      self.draggedFromPile = nil
+      return true
+    end
+  end
+  return false
+end
+  
+-- Check if clicking within the bounds of a card
+function Board:checkInBounds(card, x, y)
+  return  x <= card.x + 70 and y >= card.y and y <= card.y + 100
+end
+
+-- Reset dragged card/pile variables
+function Board:resetDragState()
+  self.draggedCard = nil
+  self.draggedStack = nil
+  self.draggedFromPile = nil
+  self.draggedFromFoundation = nil
+end
+
+-- Put card back to original position
+-- Reset state if needed
+function Board:restoreDraggedCards()
+  for _, card in ipairs(self.draggedStack or {self.draggedCard}) do
+    card.x = card.prevX
+    card.y = card.prevY
+  end
+
+  if self.draggedCard.state == STATE_ENUM.WASTE then
+    table.insert(self.waste, self.draggedCard)
+  elseif self.draggedCard.state == STATE_ENUM.ACE and self.draggedFromFoundation then
+    table.insert(self.draggedFromFoundation, self.draggedCard)
+  end
+end
+
+-- Checking release over card area
+function Board:isOverArea(x, y, areaX, areaY)
+  return x >= areaX and x <= areaX + 70 and y >= areaY - 30 and y <= areaY + 100
+end
+
+-- Release card from waste
+function Board:handleWasteRelease(x, y)
+  return self:tryPlaceOnTableau(self.draggedCard, x, y) or self:tryPlaceOnFoundation(self.draggedCard, x, y)
+end
+
+-- Release card from foundation
+function Board:handleFoundationRelease(x, y)
+  return self:tryPlaceOnTableau(self.draggedCard, x, y) or self:tryPlaceOnFoundation(self.draggedCard, x, y)
+end
+
+-- Release card from tableau
+function Board:handleTableauRelease(x, y)
+  return self:tryPlaceStackOnTableau(x, y) or self:tryPlaceCardOnFoundation(x, y)
+end
+
+-- Placing card on tableau
+function Board:tryPlaceOnTableau(card, x, y)
+  -- Checking each pile in tablaeu and inserting card/stack if legal placement
+  -- Update positions of cards and change state if legal placement
+  for i, pile in ipairs(self.tableau) do
+    local targetX = 100 + (i - 1) * 100
+    local targetY = 100 + #pile * 30
+
+    if self:isOverArea(x, y, targetX, targetY) and self:isLegalSpot(card, pile) then
+      self:updatePosition(card, pile, targetX, targetY)
+      card.state = STATE_ENUM.TABLEAU
+      return true
+    end
+  end
+
+  return false
+end
+
+-- Placeing card on foundation
+function Board:tryPlaceOnFoundation(card, x, y)
+  -- Check if legal placement into foundation piles
+  -- Update positions and change state as before with waste pile cards
+  for i, foundation in ipairs(self.foundations) do
+    local pos = self.foundationPositions[i]
+    if self:isOverArea(x, y, pos.x, pos.y) and self:legalFoundation(card, foundation) then
+      self:updatePosition(card, foundation, pos.x, pos.y)
+      self.draggedCard.state = STATE_ENUM.ACE
+      return true
+    end
+  end
+  
+  return false
+end
+
+--  Placing stack on tableau
+function Board:tryPlaceStackOnTableau(x, y)
+  for i, pile in ipairs(self.tableau) do
+    local targetX = 100 + (i - 1) * 100
+    local targetY = 100 + #pile * 30
+    
+    if self:isOverArea(x, y, targetX, targetY) and self:isLegalSpot(self.draggedCard, pile) then
+      local originalPile = self.tableau[self.draggedFromPile]
+      self:removeStackFromPile(originalPile)
+      self:addStackToPile(pile, targetX, targetY)
+      return true
+    end
+  end
+  return false
+end
+
+-- Placing card on foundation
+function Board:tryPlaceCardOnFoundation(x, y)
+  for i, foundation in ipairs(self.foundations) do
+    local pos = self.foundationPositions[i]
+    if self:isOverArea(x, y, pos.x, pos.y) and self:legalFoundation(self.draggedCard, foundation) then
+      local sourcePile = self.tableau[self.draggedFromPile]
+      self:removeCardFromPile(sourcePile, self.draggedCard)
+      self:updatePosition(self.draggedCard, foundation, pos.x, pos.y)
+      self.draggedCard.state = STATE_ENUM.ACE
+      return true
+    end
+  end
+  return false
+end
+
+function Board:removeStackFromPile(pile)
+  for i = #pile, 1, -1 do
+    if pile[i] == self.draggedStack[1] then
+      for _ = i, #pile do
+        table.remove(pile, i)
+      end
+      if #pile > 0 then
+        pile[#pile].faceUp = true
+      end
+      break
+    end
+  end
+end
+
+-- Add stack to tableau pile
+function Board:addStackToPile(pile, baseX, baseY)
+  for i, card in ipairs(self.draggedStack) do
+    local offsetY = (i - 1) * 30
+    card.x, card.y = baseX, baseY + offsetY
+    card.prevX, card.prevY = baseX, baseY + offsetY
+    card.state = STATE_ENUM.TABLEAU
+    table.insert(pile, card)
+  end
+end
+
+-- Remove a card from a given pile
+function Board:removeCardFromPile(pile, card)
+  for i = #pile, 1, -1 do
+    if pile[i] == card then
+      table.remove(pile, i)
+      if #pile > 0 then
+        pile[#pile].faceUp = true
+      end
+      break
+    end
+  end
+end
+
+-- For creating tableau at beginning of game
+function Board:createTableau(board)
+    -- Create tableau
+  for i = 1, 7 do
+    board.tableau[i] = {}
+
+    for j = 1, i do
+      local card = table.remove(deck.cards)
+      card.x = 100 + (i - 1) * 100
+      card.y = 100 + (j - 1) * 30
+      card.faceUp = (j == i)
+      table.insert(board.tableau[i], card)
+      card.state = STATE_ENUM.TABLEAU
+    end
+  end
+  
+  -- Insert leftover cards into stock
+  for _, card in ipairs(deck.cards) do
+    card.faceUp = false
+    table.insert(board.stock, card)
+    card.state = STATE_ENUM.TABLEAU
+  end
+
+  deck.cards = nil
+  
+end
+

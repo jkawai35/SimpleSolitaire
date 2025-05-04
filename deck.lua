@@ -11,6 +11,7 @@ io.stdout:setvbuf("no")
 local suits = {"Hearts", "Diamonds", "Clubs", "Spades"}
 local values = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"}
 
+
 function Deck:new()
   local deck = {}
   setmetatable(deck, Deck)
@@ -23,15 +24,15 @@ function Deck:new()
       local color
       
       if suit == "Clubs" or suit == "Spades" then
-        color = "black"
+        color = COLOR_ENUM.BLACK
       else
-        color = "red"
+        color = COLOR_ENUM.RED
       end
       
-      local card = Card:new(suit, value, image, image2, color)
+      local card = Card:new(CARD_ENUM[suit], tonumber(value), image, image2, color)
       
       table.insert(deck.cards, card)
-      card.state = "DECK"
+      card.state = STATE_ENUM.DECK
     end
   end
   
