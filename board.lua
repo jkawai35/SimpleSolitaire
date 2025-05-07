@@ -32,6 +32,7 @@ function Board:new(deck)
   return board
 end
  
+ -- Update progress to win condition
 function Board:update()
   local counter = 0
   for _, pile in ipairs(self.foundations) do
@@ -227,14 +228,6 @@ function Board:legalFoundation(card, foundation)
   end
 end
 
--- Update card position
-function Board:updatePosition(card, pile, targetX, targetY)
-  card.x = targetX
-  card.y = targetY
-  card.prevX = targetX
-  card.prevY = targetY
-  table.insert(pile, card)
-end
 
 -- Update offset when card is dragged
 function Board:updateOffset(x, y, newCard)
@@ -251,7 +244,6 @@ function Board:tryPickTableauCard(x, y)
   for pileIndex, pile in ipairs(self.tableau) do
     for i = #pile, 1, -1 do
       local card = pile[i]
-
       -- Check if click occurs within the bounds of a card in the tableau
       if card.faceUp and x >= card.x and self:checkInBounds(card, x, y) then
         self:updateOffset(x, y, card)
@@ -275,6 +267,7 @@ function Board:tryPickTableauCard(x, y)
 -- Picking up card from waste pile
 function Board:tryPickWasteCard(x, y)
   local card = self.waste[#self.waste]
+  
   if card and card.faceUp and self:checkInBounds(card, x, y) then
     self:updateOffset(x, y, card)
     table.remove(self.waste)
@@ -282,6 +275,7 @@ function Board:tryPickWasteCard(x, y)
     self.draggedFromPile = nil
     return true
   end
+  
   return false
 end
 
@@ -289,6 +283,7 @@ end
 function Board:tryPickFoundationCard(x, y)
   for i, foundation in ipairs(self.foundations) do
     local topCard = foundation[#foundation]
+
     if topCard and self:checkInBounds(topCard, x, y) then
       self:updateOffset(x, y, topCard)
       self.draggedFromFoundation = foundation
@@ -297,7 +292,9 @@ function Board:tryPickFoundationCard(x, y)
       self.draggedFromPile = nil
       return true
     end
+    
   end
+  
   return false
 end
   
@@ -358,7 +355,7 @@ function Board:tryPlaceOnTableau(card, x, y)
     local targetY = 100 + #pile * 30
 
     if self:isOverArea(x, y, targetX, targetY) and self:isLegalSpot(card, pile) then
-      self:updatePosition(card, pile, targetX, targetY)
+      card:updatePosition(pile, targetX, targetY)
       card.state = STATE_ENUM.TABLEAU
       return true
     end
@@ -373,11 +370,13 @@ function Board:tryPlaceOnFoundation(card, x, y)
   -- Update positions and change state as before with waste pile cards
   for i, foundation in ipairs(self.foundations) do
     local pos = self.foundationPositions[i]
+    
     if self:isOverArea(x, y, pos.x, pos.y) and self:legalFoundation(card, foundation) then
-      self:updatePosition(card, foundation, pos.x, pos.y)
+      card:updatePosition(foundation, pos.x, pos.y)
       self.draggedCard.state = STATE_ENUM.ACE
       return true
     end
+    
   end
   
   return false
@@ -395,7 +394,9 @@ function Board:tryPlaceStackOnTableau(x, y)
       self:addStackToPile(pile, targetX, targetY)
       return true
     end
+    
   end
+  
   return false
 end
 
@@ -403,28 +404,36 @@ end
 function Board:tryPlaceCardOnFoundation(x, y)
   for i, foundation in ipairs(self.foundations) do
     local pos = self.foundationPositions[i]
+    
     if self:isOverArea(x, y, pos.x, pos.y) and self:legalFoundation(self.draggedCard, foundation) then
       local sourcePile = self.tableau[self.draggedFromPile]
       self:removeCardFromPile(sourcePile, self.draggedCard)
-      self:updatePosition(self.draggedCard, foundation, pos.x, pos.y)
+      self.draggedCard:updatePosition(foundation, pos.x, pos.y)
       self.draggedCard.state = STATE_ENUM.ACE
       return true
     end
+    
   end
+  
   return false
 end
 
 function Board:removeStackFromPile(pile)
   for i = #pile, 1, -1 do
+    
     if pile[i] == self.draggedStack[1] then
+      
       for _ = i, #pile do
         table.remove(pile, i)
       end
+      
       if #pile > 0 then
         pile[#pile].faceUp = true
       end
+      
       break
     end
+    
   end
 end
 
@@ -442,19 +451,23 @@ end
 -- Remove a card from a given pile
 function Board:removeCardFromPile(pile, card)
   for i = #pile, 1, -1 do
+    
     if pile[i] == card then
       table.remove(pile, i)
+      
       if #pile > 0 then
         pile[#pile].faceUp = true
       end
+      
       break
     end
+    
   end
 end
 
 -- For creating tableau at beginning of game
 function Board:createTableau(board)
-    -- Create tableau
+  -- Create tableau
   for i = 1, 7 do
     board.tableau[i] = {}
 
@@ -466,6 +479,7 @@ function Board:createTableau(board)
       table.insert(board.tableau[i], card)
       card.state = STATE_ENUM.TABLEAU
     end
+    
   end
   
   -- Insert leftover cards into stock

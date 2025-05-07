@@ -1,6 +1,7 @@
 require("deck")
 require("board")
 
+-- Create quick reset button
 local resetButton = {
   x = 12,
   y = 560,
@@ -33,7 +34,6 @@ function love.draw()
   love.graphics.setColor(0, 0, 0)
   love.graphics.printf(resetButton.label, resetButton.x, resetButton.y + 8, resetButton.width, "center")
   love.graphics.setColor(1, 1, 1)
-
 end
 
 function love.mousepressed(x, y, button)
